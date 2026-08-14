@@ -4,11 +4,11 @@ const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord
 const fs = require('fs');
 const path = require('path');
 
-// Load from Render Secrets
+// Load secrets from Render Environment Variables
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 
-// 🔍 DEBUG — tell us if secrets are loading
+// Debug checks
 console.log('🔑 Token loaded:', !!TOKEN);
 console.log('🆔 Client ID loaded:', !!CLIENT_ID);
 
@@ -27,13 +27,13 @@ const client = new Client({
   ]
 });
 
-// 📂 Load commands
+// 📂 Load all commands from /commands folder
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
-  console.log(`📂 Found ${commandFiles.length} command files`);
+  console.log(`📂 Found ${commandFiles.length} command file(s)`);
 
   for (const file of commandFiles) {
     try {
@@ -52,12 +52,12 @@ if (fs.existsSync(commandsPath)) {
   console.error('❌ /commands folder not found!');
 }
 
-// 🚀 Ready
+// 🚀 Ready event
 client.once('ready', async () => {
-  console.log(`✅ LOGGED IN AS: ${client.user.tag}`);
-  console.log(`📦 Total commands: ${client.commands.size}`);
+  console.log('✅ BOT IS ONLINE — Logged in as:', client.user.tag);
+  console.log(`📦 Total commands loaded: ${client.commands.size}`);
 
-  // Register slash commands
+  // Register slash commands globally
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   try {
     console.log('🔄 Registering slash commands...');
@@ -65,30 +65,42 @@ client.once('ready', async () => {
       Routes.applicationCommands(CLIENT_ID),
       { body: client.commands.map(c => c.data.toJSON()) }
     );
-    console.log('✅ Commands registered! (May take ~1hr to show everywhere)');
+    console.log('✅ Commands registered! (May take ~1hr to appear everywhere)');
   } catch (e) {
-    console.error('❌ Failed to register commands:', e);
+    console.error('❌ Failed to register commands:', e.message);
   }
 });
 
-// ⚡ Run commands
+// ⚡ Handle command runs
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const cmd = client.commands.get(interaction.commandName);
   if (!cmd) return;
+
   try {
     await cmd.execute(interaction);
   } catch (e) {
-    console.error(`/${interaction.commandName}:`, e);
-    interaction.reply({ content: '❌ Error running command', ephemeral: true }).catch(() => {});
+    console.error(`/${interaction.commandName} error:`, e.message);
+    interaction.reply({ content: '❌ Something went wrong running that command.', ephemeral: true }).catch(() => {});
   }
 });
 
-// 🔐 Login with error feedback
-console.log('🔐 Attempting to log in...');
+// 🔐 Login with timeout + clear errors
+console.log('🔐 Attempting to connect to Discord...');
+
+const loginTimeout = setTimeout(() => {
+  console.error('⏰ TIMEOUT — No response from Discord after 30 seconds');
+  console.error('👉 Check: Privileged Intents ON? Token correct? IP blocked?');
+  process.exit(1);
+}, 30000);
+
 client.login(TOKEN)
-  .then(() => console.log('✅ Login promise resolved!'))
+  .then(() => {
+    clearTimeout(loginTimeout);
+    console.log('✅ Login successful!');
+  })
   .catch(err => {
-    console.error('❌ LOGIN FAILED:', err.message);
+    clearTimeout(loginTimeout);
+    console.error('❌ LOGIN FAILED — Error:', err.message);
     process.exit(1);
   });
