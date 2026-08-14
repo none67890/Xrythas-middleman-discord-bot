@@ -1,23 +1,15 @@
-require('./keepalive.js');
-
 const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 
-// Load secrets from Render Environment Variables
+// Load secrets from environment variables
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 
-// Debug checks
-console.log('🔑 Token loaded:', !!TOKEN);
-console.log('🆔 Client ID loaded:', !!CLIENT_ID);
+const BOT_NAME = "Xrytha’s Middleman";
 
-if (!TOKEN || !CLIENT_ID) {
-  console.error('❌ Missing DISCORD_TOKEN or DISCORD_CLIENT_ID in Environment Variables!');
-  process.exit(1);
-}
-
-// Bot setup
+// Create bot client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -27,80 +19,108 @@ const client = new Client({
   ]
 });
 
-// 📂 Load all commands from /commands folder
+// Command collection
 client.commands = new Collection();
-const commandsPath = path.join(__dirname, 'commands');
 
+// ------------------------------
+// Load all commands from /commands folder
+// ------------------------------
+const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
-  console.log(`📂 Found ${commandFiles.length} command file(s)`);
-
   for (const file of commandFiles) {
     try {
       const cmd = require(path.join(commandsPath, file));
-      if ('data' in cmd && 'execute' in cmd) {
+      if (cmd.data && cmd.execute) {
         client.commands.set(cmd.data.name, cmd);
-        console.log(`✅ Loaded: ${cmd.data.name}`);
-      } else {
-        console.log(`⚠️ Skipped: ${file} — missing data/execute`);
+        console.log(`✅ [${BOT_NAME}] Loaded: ${cmd.data.name}`);
       }
-    } catch (e) {
-      console.error(`❌ Error loading ${file}:`, e.message);
+    } catch (err) {
+      console.error(`❌ [${BOT_NAME}] Failed to load ${file}:`, err.message);
     }
   }
 } else {
-  console.error('❌ /commands folder not found!');
+  console.log(`⚠️ [${BOT_NAME}] /commands folder not found`);
 }
 
-// 🚀 Ready event
-client.once('ready', async () => {
-  console.log('✅ BOT IS ONLINE — Logged in as:', client.user.tag);
-  console.log(`📦 Total commands loaded: ${client.commands.size}`);
+// ------------------------------
+// Interaction handler
+// ------------------------------
+client.on('interactionCreate', async interaction => {
+  // Slash commands
+  if (interaction.isChatInputCommand()) {
+    const cmd = client.commands.get(interaction.commandName);
+    if (!cmd) return;
+    try {
+      await cmd.execute(interaction, client);
+    } catch (err) {
+      console.error(`❌ [${BOT_NAME}] /${interaction.commandName}:`, err.message);
+      await interaction.reply({ content: '❌ Something went wrong.', ephemeral: true }).catch(() => {});
+    }
+  }
 
-  // Register slash commands globally
+  // Buttons
+  else if (interaction.isButton()) {
+    const verifyCmd = client.commands.get('verify');
+    if (verifyCmd?.buttonHandler) {
+      try {
+        await verifyCmd.buttonHandler(interaction);
+      } catch (err) {
+        console.error(`❌ [${BOT_NAME}] Button error:`, err.message);
+      }
+    }
+  }
+
+  // Modals
+  else if (interaction.isModalSubmit()) {
+    const verifyCmd = client.commands.get('verify');
+    if (verifyCmd?.modalHandler) {
+      try {
+        await verifyCmd.modalHandler(interaction);
+      } catch (err) {
+        console.error(`❌ [${BOT_NAME}] Modal error:`, err.message);
+      }
+    }
+  }
+});
+
+// ------------------------------
+// Ready Event — Register Commands
+// ------------------------------
+client.once('ready', async () => {
+  console.log(`✅ [${BOT_NAME}] LOGGED IN AS: ${client.user.tag}`);
+  
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   try {
-    console.log('🔄 Registering slash commands...');
-    await rest.put(
-      Routes.applicationCommands(CLIENT_ID),
-      { body: client.commands.map(c => c.data.toJSON()) }
-    );
-    console.log('✅ Commands registered! (May take ~1hr to appear everywhere)');
-  } catch (e) {
-    console.error('❌ Failed to register commands:', e.message);
+    const commandsJSON = [...client.commands.values()].map(c => c.data.toJSON());
+    console.log(`🔄 [${BOT_NAME}] Registering ${commandsJSON.length} commands...`);
+    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commandsJSON });
+    console.log(`✅ [${BOT_NAME}] Commands registered!`);
+  } catch (err) {
+    console.error(`❌ [${BOT_NAME}] Register failed:`, err.message);
   }
 });
 
-// ⚡ Handle command runs
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-  const cmd = client.commands.get(interaction.commandName);
-  if (!cmd) return;
+// ------------------------------
+// Keep-alive server
+// ------------------------------
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send(`✅ ${BOT_NAME} — Trusted Middleman Service`));
+app.listen(PORT, () => console.log(`✅ [${BOT_NAME}] Keep-alive on port ${PORT}`));
 
-  try {
-    await cmd.execute(interaction);
-  } catch (e) {
-    console.error(`/${interaction.commandName} error:`, e.message);
-    interaction.reply({ content: '❌ Something went wrong running that command.', ephemeral: true }).catch(() => {});
-  }
-});
-
-// 🔐 Login with timeout + clear errors
-console.log('🔐 Attempting to connect to Discord...');
-
-const loginTimeout = setTimeout(() => {
-  console.error('⏰ TIMEOUT — No response from Discord after 30 seconds');
-  console.error('👉 Check: Privileged Intents ON? Token correct? IP blocked?');
+// ------------------------------
+// Login
+// ------------------------------
+console.log(`🔐 [${BOT_NAME}] Connecting...`);
+if (!TOKEN || !CLIENT_ID) {
+  console.error(`❌ [${BOT_NAME}] Missing DISCORD_TOKEN or DISCORD_CLIENT_ID`);
   process.exit(1);
-}, 30000);
+}
 
 client.login(TOKEN)
-  .then(() => {
-    clearTimeout(loginTimeout);
-    console.log('✅ Login successful!');
-  })
+  .then(() => console.log(`✅ [${BOT_NAME}] Online!`))
   .catch(err => {
-    clearTimeout(loginTimeout);
-    console.error('❌ LOGIN FAILED — Error:', err.message);
+    console.error(`❌ [${BOT_NAME}] Login failed:`, err.message);
     process.exit(1);
   });
