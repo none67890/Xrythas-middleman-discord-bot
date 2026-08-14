@@ -1,0 +1,13 @@
+{
+  "name": "xrytha-middleman-bot",
+  "version": "1.0.0",
+  "description": "Xrytha's Middleman Service Bot",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "express": "^4.19.2"
+  }
+}
