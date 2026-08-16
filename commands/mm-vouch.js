@@ -10,7 +10,7 @@ const loadData = () => JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 const saveData = (d) => fs.writeFileSync(dataPath, JSON.stringify(d, null, 2));
 
 // ✅ PUT YOUR CHANNEL ID HERE — right-click channel → Copy Channel ID
-const VOUCH_CHANNEL_ID = 'PUT_YOUR_CHANNEL_ID_HERE';
+const VOUCH_CHANNEL_ID = '1537578277068079264';
 
 module.exports = {
   data: new SlashCommandBuilder()
