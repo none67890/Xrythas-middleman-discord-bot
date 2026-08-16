@@ -2,6 +2,9 @@ const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord
 const fs = require('fs');
 const path = require('path');
 
+// Keepalive for Render/UptimeBot
+require('./keepalive.js');
+
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const BOT_OWNER_ID = process.env.DISCORD_OWNER_ID;
@@ -66,7 +69,9 @@ client.on('interactionCreate', async interaction => {
     await cmd.execute(interaction, client);
   } catch (e) {
     console.error(e);
-    interaction.reply({ content: '❌ Error.', ephemeral: true }).catch(() => {});
+    if (!interaction.replied) {
+      interaction.reply({ content: '❌ Error.', ephemeral: true }).catch(() => {});
+    }
   }
 });
 
