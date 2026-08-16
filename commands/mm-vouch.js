@@ -2,14 +2,13 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
-// Where vouch counts are saved
 const dataPath = path.join(__dirname, '../vouches.json');
 if (!fs.existsSync(dataPath)) fs.writeFileSync(dataPath, '{}');
 
 const loadData = () => JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 const saveData = (d) => fs.writeFileSync(dataPath, JSON.stringify(d, null, 2));
 
-// ✅ PUT YOUR VOUCH CHANNEL ID HERE
+// ✅ PUT YOUR CHANNEL ID HERE
 const VOUCH_CHANNEL_ID = '1537578277068079264';
 
 module.exports = {
@@ -32,32 +31,27 @@ module.exports = {
     const comment = interaction.options.getString('comment');
     const user = interaction.user;
 
-    // Can't vouch for yourself
     if (mm.id === user.id) {
-      return interaction.reply({
-        content: '❌ You cannot vouch for yourself!',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ You cannot vouch for yourself!', ephemeral: true });
     }
 
-    // Add +1 vouch
     const data = loadData();
     data[mm.id] = (data[mm.id] || 0) + 1;
     saveData(data);
     const count = data[mm.id];
 
-    // ✅ Update nickname: Name (Vouch #X)
+    // ✅ KEEPS their current name — just adds (Vouch #X) at the end
     const member = interaction.guild.members.cache.get(mm.id);
     if (member && member.manageable) {
-      const baseName = member.user.username;
+      // Remove old (Vouch #X) if there is one, then add the new one
+      let baseName = member.displayName.replace(/\s*\(Vouch #\d+\)\s*$/, '');
       try {
         await member.setNickname(`${baseName} (Vouch #${count})`);
-      } catch (err) {
+      } catch (e) {
         console.log('⚠️ Could not change nickname — check permissions/role order');
       }
     }
 
-    // Make the vouch embed
     const embed = new EmbedBuilder()
       .setTitle('✅ NEW VOUCH — Middleman Service')
       .setColor('#9932CC')
@@ -69,18 +63,14 @@ module.exports = {
       )
       .setTimestamp();
 
-    // Send to channel
     const channel = interaction.guild.channels.cache.get(VOUCH_CHANNEL_ID);
     if (!channel) {
-      return interaction.reply({
-        content: '❌ Vouch channel not found — check channel ID in code!',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ Vouch channel not found!', ephemeral: true });
     }
 
     await channel.send({ embeds: [embed] });
     await interaction.reply({
-      content: `✅ Vouch recorded! <@${mm.id}> now has **${count}** vouches.`,
+      content: `✅ Vouch recorded! <@${mm.id}> — **${count}** vouches.`,
       ephemeral: true
     });
   }
