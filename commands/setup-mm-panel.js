@@ -2,9 +2,6 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 
 const BOT_OWNER_ID = '1491469471775457290';
 
-// Your video link — already filled in!
-const VIDEO_LINK = 'https://cdn.discordapp.com/attachments/1537578077821870210/1539023077197877298/copy_5F7D1781-4276-404E-A57C-A6C7DD6F6945.mov?ex=6a84ce6f&is=6a837cef&hm=f97168a40bdcfb8e181f043852a4ccfc0ad6667cd4b12a375ec016f38bdde58a&';
-
 module.exports = {
   ownerOnly: true,
   data: new SlashCommandBuilder()
@@ -45,13 +42,12 @@ module.exports = {
         .setStyle(ButtonStyle.Success)
     );
 
-    // ✅ Video link in message content — Discord auto-plays it!
+    // ✅ Clean — no video, just embed + buttons
     await interaction.channel.send({
-      content: `🎬 **Service Overview:**\n${VIDEO_LINK}`,
       embeds: [embed],
       components: [buttons]
     });
 
-    await interaction.reply({ content: '✅ Middleman setup message sent!', ephemeral: true });
+    await interaction.reply({ content: '✅ Middleman setup sent!', ephemeral: true });
   }
 };
