@@ -2,18 +2,14 @@ const { Client, GatewayIntentBits, Collection, REST, Routes, PermissionsBitField
 const fs = require('fs');
 const path = require('path');
 
-// Keep bot online
 require('./keepalive.js');
 
-// Load secrets from environment variables
+// ✅ All from Render Secrets — nothing hardcoded!
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const BOT_OWNER_ID = process.env.DISCORD_OWNER_ID;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
-
-// ✅ TICKET SYSTEM SETUP — ADD THESE IN RENDER SECRETS!
 const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID;
-const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const MIDDLEMAN_ROLES = [
   process.env.MM_ROLE_1,
   process.env.MM_ROLE_2,
@@ -21,9 +17,8 @@ const MIDDLEMAN_ROLES = [
   process.env.MM_ROLE_4
 ];
 
-// Check required env vars
 if (!TOKEN || !CLIENT_ID || !BOT_OWNER_ID || !GUILD_ID) {
-  console.error('❌ Missing Discord env variables!');
+  console.error('❌ Missing required Discord environment variables!');
   process.exit(1);
 }
 
@@ -51,16 +46,16 @@ if (fs.existsSync(commandsPath)) {
         console.log('✅ Loaded:', cmd.data.name);
       }
     } catch (e) {
-      console.error('❌ Load error:', file, e.message);
+      console.error('❌ Error loading', file, ':', e.message);
     }
   }
 }
 
-// ─── When Bot Ready ───
+// ─── Ready ───
 client.once('ready', async () => {
   console.log(`✅ Logged in: ${client.user.tag}`);
-  console.log('🎟️ Middleman Ticket System Active');
-  console.log('📊 Total commands loaded:', client.commands.size);
+  console.log('🎟️ Xrytha\'s Middleman Bot — Online');
+  console.log('📊 Commands loaded:', client.commands.size);
 
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   const cmds = [...client.commands.values()].map(c => c.data.toJSON());
@@ -71,15 +66,15 @@ client.once('ready', async () => {
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: cmds }
     );
-    console.log('✅ Commands Registered — check your server!');
+    console.log('✅ Commands registered!');
   } catch (e) {
-    console.error('❌ Register error:', e);
+    console.error('❌ Command register error:', e);
   }
 });
 
-// ─── Slash Command Handler ───
+// ─── Interaction Handler ───
 client.on('interactionCreate', async interaction => {
-  // Handle slash commands
+  // Slash Commands
   if (interaction.isChatInputCommand()) {
     const cmd = client.commands.get(interaction.commandName);
     if (!cmd) return;
@@ -91,14 +86,14 @@ client.on('interactionCreate', async interaction => {
     try {
       await cmd.execute(interaction, client);
     } catch (e) {
-      console.error(e);
+      console.error('Command error:', e);
       if (!interaction.replied) {
-        interaction.reply({ content: '❌ Error running command.', ephemeral: true }).catch(() => {});
+        interaction.reply({ content: '❌ Something went wrong.', ephemeral: true }).catch(() => {});
       }
     }
   }
 
-  // ─── BUTTON: Open Ticket → Show Modal Form ───
+  // ─── Button: Open Modal Form ───
   if (interaction.isButton() && interaction.customId === 'mm_open_modal') {
     const modal = new ModalBuilder()
       .setCustomId('mm_trade_form')
@@ -122,7 +117,7 @@ client.on('interactionCreate', async interaction => {
       .setCustomId('your_userid')
       .setLabel('Your Roblox User ID')
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Find it on your Roblox profile URL')
+      .setPlaceholder('Found on your Roblox profile URL')
       .setRequired(true);
 
     const partnerInput = new TextInputBuilder()
@@ -149,7 +144,7 @@ client.on('interactionCreate', async interaction => {
     await interaction.showModal(modal);
   }
 
-  // ─── MODAL SUBMITTED → Create Ticket Channel ───
+  // ─── Modal Submit → Create Ticket ───
   if (interaction.isModalSubmit() && interaction.customId === 'mm_trade_form') {
     const item = interaction.fields.getTextInputValue('trade_item');
     const value = interaction.fields.getTextInputValue('trade_value');
@@ -162,7 +157,7 @@ client.on('interactionCreate', async interaction => {
       c => c.name.startsWith('mm-') && c.topic === `user:${interaction.user.id}`
     );
     if (existing) {
-      return interaction.reply({ content: `❌ You already have a ticket: ${existing}`, ephemeral: true });
+      return interaction.reply({ content: `❌ You already have a ticket open: ${existing}`, ephemeral: true });
     }
 
     const category = interaction.guild.channels.cache.get(TICKET_CATEGORY_ID);
@@ -183,8 +178,9 @@ client.on('interactionCreate', async interaction => {
       }
     ];
 
-    // Add all middleman roles
-    for (const roleId of MIDDLEMAN_ROLES.filter(Boolean)) {
+    // Add all middleman roles (skip any empty ones)
+    for (const roleId of MIDDLEMAN_ROLES) {
+      if (!roleId) continue;
       perms.push({
         id: roleId,
         allow: [
@@ -205,12 +201,12 @@ client.on('interactionCreate', async interaction => {
       permissionOverwrites: perms
     });
 
-    // Welcome embed with their trade info
+    // Professional welcome embed
     const welcomeEmbed = new EmbedBuilder()
       .setTitle('🎟️ **Middleman Ticket — Trade Details**')
       .setColor('#9932CC')
       .addFields(
-        { name: '📤 Trading', value: item, inline: false },
+        { name: '📤 Trading', value: `**${item}**`, inline: false },
         { name: '💰 Value', value: value, inline: true },
         { name: '🆔 Your User ID', value: `\`${yourId}\``, inline: true },
         { name: '🤝 Trading With', value: partner, inline: false },
@@ -218,9 +214,9 @@ client.on('interactionCreate', async interaction => {
       )
       .setDescription(
         `Welcome <@${interaction.user.id}>!\n\n` +
-        '✅ **Your details have been saved.**\n' +
+        '✅ **Your trade details have been recorded.**\n' +
         'A verified middleman will be with you shortly.\n\n' +
-        '⚠️ **Do NOT proceed until told to by a middleman.**\n' +
+        '⚠️ **Do NOT proceed or send anything until told to by a middleman.**\n' +
         '⚠️ Never go first — always wait for instructions.'
       )
       .setFooter({ text: 'Xrytha\'s Middleman Service • Verified & Trusted' })
@@ -235,31 +231,16 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply({ content: `✅ Ticket created: ${ticketCh}`, ephemeral: true });
   }
 
-  // ─── BUTTON: Close Ticket ───
+  // ─── Close Ticket — NO LOG NEEDED ───
   if (interaction.isButton() && interaction.customId === 'mm_close_ticket') {
-    // Log the closure
-    const logCh = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (logCh) {
-      await logCh.send({
-        embeds: [new EmbedBuilder()
-          .setTitle('🔒 Ticket Closed')
-          .setColor('#E74C3C')
-          .addFields(
-            { name: 'Channel', value: `\`${interaction.channel.name}\``, inline: true },
-            { name: 'Closed By', value: `<@${interaction.user.id}>`, inline: true }
-          )
-          .setTimestamp()
-        ]
-      });
-    }
     await interaction.reply({ content: '🔒 Closing ticket in 3 seconds...', ephemeral: true });
     setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
   }
 
-  // ─── BUTTON: Claim Ticket ───
+  // ─── Claim Ticket ───
   if (interaction.isButton() && interaction.customId === 'mm_claim_ticket') {
-    const hasPermission = MIDDLEMAN_ROLES.some(r => r && interaction.member.roles.cache.has(r));
-    if (!hasPermission) {
+    const hasRole = MIDDLEMAN_ROLES.some(r => r && interaction.member.roles.cache.has(r));
+    if (!hasRole) {
       return interaction.reply({ content: '❌ Only middleman staff can claim tickets!', ephemeral: true });
     }
 
