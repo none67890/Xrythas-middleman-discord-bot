@@ -17,6 +17,9 @@ const MIDDLEMAN_ROLES = [
   process.env.MM_ROLE_4
 ];
 
+// Your boost channel ID
+const BOOST_CHANNEL_ID = '1537576010436968628';
+
 if (!TOKEN || !CLIENT_ID || !BOT_OWNER_ID || !GUILD_ID) {
   console.error('❌ Missing required Discord environment variables!');
   process.exit(1);
@@ -25,9 +28,9 @@ if (!TOKEN || !CLIENT_ID || !BOT_OWNER_ID || !GUILD_ID) {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.MessageContent
   ]
 });
 
@@ -203,7 +206,7 @@ client.on('interactionCreate', async interaction => {
 
     // Professional welcome embed
     const welcomeEmbed = new EmbedBuilder()
-      .setTitle('🎟️ **Middleman Ticket — Trade Details**')
+      .setTitle('🎟️ Middleman Ticket — Trade Details')
       .setColor('#9932CC')
       .addFields(
         { name: '📤 Trading', value: `**${item}**`, inline: false },
@@ -231,7 +234,7 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply({ content: `✅ Ticket created: ${ticketCh}`, ephemeral: true });
   }
 
-  // ─── Close Ticket — NO LOG NEEDED ───
+  // ─── Close Ticket ───
   if (interaction.isButton() && interaction.customId === 'mm_close_ticket') {
     await interaction.reply({ content: '🔒 Closing ticket in 3 seconds...', ephemeral: true });
     setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
@@ -246,13 +249,40 @@ client.on('interactionCreate', async interaction => {
 
     await interaction.channel.send({
       embeds: [new EmbedBuilder()
-        .setTitle('✅ **Ticket Claimed**')
+        .setTitle('✅ Ticket Claimed')
         .setColor('#2ECC71')
         .setDescription(`This ticket is now being handled by <@${interaction.user.id}>.`)
         .setTimestamp()
       ]
     });
     await interaction.update({ components: [] }).catch(() => {});
+  }
+});
+
+// ─── BOOST ANNOUNCEMENT SYSTEM ───
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  // Detect when someone starts boosting
+  if (!oldMember.premiumSince && newMember.premiumSince) {
+    const channel = newMember.guild.channels.cache.get(BOOST_CHANNEL_ID);
+    if (!channel) return;
+
+    const boostEmbed = new EmbedBuilder()
+      .setTitle('🚀 SERVER BOOSTED!')
+      .setColor('#F472B6')
+      .setThumbnail(newMember.user.displayAvatarURL({ size: 256 }))
+      .setDescription(
+        `Thank you so much <@${newMember.id}> for boosting the server!\n\n` +
+        '💜 We appreciate your support!\n' +
+        'Enjoy your perks! 🎉'
+      )
+      .addFields(
+        { name: '👤 Booster', value: `<@${newMember.user.id}>`, inline: true },
+        { name: '📅 Boosting since', value: `<t:${Math.floor(newMember.premiumSince.getTime() / 1000)}:R>`, inline: true }
+      )
+      .setFooter({ text: 'Xrytha\'s Middleman Service • Thank you for boosting!' })
+      .setTimestamp();
+
+    await channel.send({ content: `<@${newMember.id}> THANK YOU! 🚀`, embeds: [boostEmbed] });
   }
 });
 
