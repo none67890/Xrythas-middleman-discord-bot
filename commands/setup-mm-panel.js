@@ -1,43 +1,54 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
-const BOT_OWNER_ID = '1491469471775457290';
+// ✅ Pulls from Render secrets — NO hardcoded IDs!
+const BOT_OWNER_ID = process.env.DISCORD_OWNER_ID;
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup-mm-panel')
-    .setDescription('🔒 [OWNER] Create middleman ticket panel'),
+    .setDescription('🔒 [OWNER] Set up the middleman ticket panel'),
 
   async execute(interaction) {
     if (interaction.user.id !== BOT_OWNER_ID) {
-      return interaction.reply({ content: '❌ Owner only!', ephemeral: true });
+      return interaction.reply({ content: '❌ Only the bot owner can run this command!', ephemeral: true });
     }
 
-    const embed = new EmbedBuilder()
+    const panelEmbed = new EmbedBuilder()
       .setTitle('🎟️ **Xrytha\'s Middleman Service**')
       .setColor('#9932CC')
       .setThumbnail(interaction.guild.iconURL({ size: 256 }))
       .setDescription(
-        '📌 **Start a Middleman Trade**\n\n' +
-        'Click the button below to begin. You will be asked for:\n' +
-        '• What you are trading\n' +
-        '• Roblox User ID(s)\n' +
-        '• Who you are trading with\n\n' +
+        'Welcome to **Xrytha\'s Middleman Service** — your trusted, safe way to trade!\n\n' +
+        '📌 **How It Works:**\n' +
+        '1. Click **"Start Middleman Trade"** below\n' +
+        '2. Fill out the quick form — what you\'re trading & who with\n' +
+        '3. A private ticket channel will open automatically\n' +
+        '4. Wait for a verified middleman to assist you\n' +
+        '5. Complete your trade safely — no scams!\n\n' +
         '🛡️ **SAFETY RULES:**\n' +
-        '• Never go first — wait for middleman\n' +
-        '• No passwords or sensitive info\n' +
-        '• Fake tickets = instant ban'
+        '• We NEVER ask for your password — anyone asking is a scammer\n' +
+        '• We NEVER DM you first — check our verified roles in the server!\n' +
+        '• NEVER go first — always follow middleman instructions\n' +
+        '• Use a middleman for EVERY high-value trade\n' +
+        '• Fake tickets or abuse = instant ban\n\n' +
+        '💜 **Trusted • Verified • Safe**'
+      )
+      .addFields(
+        { name: '📋 Need Help?', value: 'Ping any verified middleman in the server' },
+        { name: '⚠️ Important', value: 'Please be patient — middlemen are busy too!' }
       )
       .setFooter({ text: 'Xrytha\'s Middleman Service • Verified & Trusted' })
       .setTimestamp();
 
-    const btn = new ActionRowBuilder().addComponents(
+    const buttons = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('mm_open_modal')
         .setLabel('🎟️ Start Middleman Trade')
         .setStyle(ButtonStyle.Primary)
+        .setEmoji('🎟️')
     );
 
-    await interaction.channel.send({ embeds: [embed], components: [btn] });
-    await interaction.reply({ content: '✅ Panel sent!', ephemeral: true });
+    await interaction.channel.send({ embeds: [panelEmbed], components: [buttons] });
+    await interaction.reply({ content: '✅ Ticket panel sent!', ephemeral: true });
   }
 };
