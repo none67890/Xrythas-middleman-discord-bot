@@ -1,18 +1,31 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
-// ✅ Pulls from Render secrets — NO hardcoded IDs!
+// ✅ Pulls from Render secrets — NO typos!
 const BOT_OWNER_ID = process.env.DISCORD_OWNER_ID;
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('setup-mm-panel')
-    .setDescription('🔒 [OWNER] Set up the middleman ticket panel'),
+    .setName('mm-setup')
+    .setDescription('🔒 [OWNER] Create middleman ticket panel'),
 
   async execute(interaction) {
-    if (interaction.user.id !== BOT_OWNER_ID) {
-      return interaction.reply({ content: '❌ Only the bot owner can run this command!', ephemeral: true });
+    // Check if env var is set
+    if (!BOT_OWNER_ID) {
+      return interaction.reply({
+        content: '❌ Error: DISCORD_OWNER_ID not set in Render environment variables!',
+        ephemeral: true
+      });
     }
 
+    // Check if user is owner
+    if (interaction.user.id !== BOT_OWNER_ID) {
+      return interaction.reply({
+        content: '❌ Only the bot owner can use this command!',
+        ephemeral: true
+      });
+    }
+
+    // Professional embed for Xrytha's Middleman Service
     const panelEmbed = new EmbedBuilder()
       .setTitle('🎟️ **Xrytha\'s Middleman Service**')
       .setColor('#9932CC')
@@ -27,9 +40,8 @@ module.exports = {
         '5. Complete your trade safely — no scams!\n\n' +
         '🛡️ **SAFETY RULES:**\n' +
         '• We NEVER ask for your password — anyone asking is a scammer\n' +
-        '• We NEVER DM you first — check our verified roles in the server!\n' +
+        '• We NEVER DM you first — check our verified roles!\n' +
         '• NEVER go first — always follow middleman instructions\n' +
-        '• Use a middleman for EVERY high-value trade\n' +
         '• Fake tickets or abuse = instant ban\n\n' +
         '💜 **Trusted • Verified • Safe**'
       )
