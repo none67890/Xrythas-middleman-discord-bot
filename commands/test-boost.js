@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 // Put YOUR Discord ID here
-const BOT_OWNER_ID = 'YOUR_ID_HERE';
+const BOT_OWNER_ID = '1491469471775457290';
 const BOOST_CHANNEL_ID = '1537576010436968628';
 
 module.exports = {
