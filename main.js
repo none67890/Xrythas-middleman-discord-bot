@@ -17,7 +17,7 @@ const MIDDLEMAN_ROLES = [
   process.env.MM_ROLE_4
 ];
 
-// Your boost channel ID
+// Boost channel ID — already filled in!
 const BOOST_CHANNEL_ID = '1537576010436968628';
 
 if (!TOKEN || !CLIENT_ID || !BOT_OWNER_ID || !GUILD_ID) {
@@ -96,7 +96,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // ─── Button: Open Modal Form ───
+  // ─── BUTTON: Open Ticket Form ───
   if (interaction.isButton() && interaction.customId === 'mm_open_modal') {
     const modal = new ModalBuilder()
       .setCustomId('mm_trade_form')
@@ -147,7 +147,32 @@ client.on('interactionCreate', async interaction => {
     await interaction.showModal(modal);
   }
 
-  // ─── Modal Submit → Create Ticket ───
+  // ─── BUTTON: Show Rules ───
+  if (interaction.isButton() && interaction.customId === 'mm_rules') {
+    const rulesEmbed = new EmbedBuilder()
+      .setTitle('📜 Xrytha\'s Middleman Rules')
+      .setColor('#9932CC')
+      .setDescription(
+        '• Never go first — middleman protects both sides\n' +
+        '• No DMs — all trades in tickets only\n' +
+        '• No passwords or 2FA codes — ever\n' +
+        '• Screenshots of everything\n' +
+        '• Be patient — wait for staff to claim\n' +
+        '• Use `/vouch` after trade in #vouches channel\n' +
+        '• Anyone DMing you first = SCAMMER'
+      );
+    return interaction.reply({ embeds: [rulesEmbed], ephemeral: true });
+  }
+
+  // ─── BUTTON: Vouches Info ───
+  if (interaction.isButton() && interaction.customId === 'mm_vouches') {
+    return interaction.reply({
+      content: '⭐ **How to leave a vouch:**\n• Go to #vouches channel\n• Positive: `/vouch @User positive`\n• Negative: `/vouch @User negative [reason]`\n\nThank you for trading with us! 💜',
+      ephemeral: true
+    });
+  }
+
+  // ─── MODAL SUBMIT → Create Ticket ───
   if (interaction.isModalSubmit() && interaction.customId === 'mm_trade_form') {
     const item = interaction.fields.getTextInputValue('trade_item');
     const value = interaction.fields.getTextInputValue('trade_value');
@@ -181,7 +206,7 @@ client.on('interactionCreate', async interaction => {
       }
     ];
 
-    // Add all middleman roles (skip any empty ones)
+    // Add all middleman roles (skip empty ones)
     for (const roleId of MIDDLEMAN_ROLES) {
       if (!roleId) continue;
       perms.push({
@@ -204,22 +229,22 @@ client.on('interactionCreate', async interaction => {
       permissionOverwrites: perms
     });
 
-    // Professional welcome embed
+    // Welcome embed in ticket
     const welcomeEmbed = new EmbedBuilder()
       .setTitle('🎟️ Middleman Ticket — Trade Details')
       .setColor('#9932CC')
       .addFields(
         { name: '📤 Trading', value: `**${item}**`, inline: false },
         { name: '💰 Value', value: value, inline: true },
-        { name: '🆔 Your User ID', value: `\`${yourId}\``, inline: true },
+        { name: '🆔 Your Roblox ID', value: `\`${yourId}\``, inline: true },
         { name: '🤝 Trading With', value: partner, inline: false },
         { name: '📝 Extra Notes', value: extra }
       )
       .setDescription(
         `Welcome <@${interaction.user.id}>!\n\n` +
         '✅ **Your trade details have been recorded.**\n' +
-        'A verified middleman will be with you shortly.\n\n' +
-        '⚠️ **Do NOT proceed or send anything until told to by a middleman.**\n' +
+        'A verified middleman will claim this ticket shortly.\n\n' +
+        '⚠️ **Do NOT send anything until told by a middleman.**\n' +
         '⚠️ Never go first — always wait for instructions.'
       )
       .setFooter({ text: 'Xrytha\'s Middleman Service • Verified & Trusted' })
@@ -261,7 +286,6 @@ client.on('interactionCreate', async interaction => {
 
 // ─── BOOST ANNOUNCEMENT SYSTEM ───
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
-  // Detect when someone starts boosting
   if (!oldMember.premiumSince && newMember.premiumSince) {
     const channel = newMember.guild.channels.cache.get(BOOST_CHANNEL_ID);
     if (!channel) return;
