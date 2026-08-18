@@ -1,53 +1,85 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require('discord.js');
 
+// 🔒 YOUR Discord ID — only you can run this command
 const BOT_OWNER_ID = '1491469471775457290';
 
 module.exports = {
   ownerOnly: true,
   data: new SlashCommandBuilder()
-    .setName('mm-setup')
-    .setDescription('🔒 Setup & send Middleman Service info'),
+    .setName('setuppanel')
+    .setDescription('🔒 Send Xrytha\'s Middleman Service panel'),
 
   async execute(interaction) {
+    // Block anyone else
     if (interaction.user.id !== BOT_OWNER_ID) {
-      return interaction.reply({ content: '❌ Owner only.', ephemeral: true });
+      return interaction.reply({ content: '❌ Only the owner can use this command.', ephemeral: true });
     }
 
-    const embed = new EmbedBuilder()
+    // 🟣🟠 MAIN PANEL EMBED
+    const panelEmbed = new EmbedBuilder()
       .setTitle('🛡️ **Xrytha\'s Middleman Service**')
-      .setColor('#9932CC')
+      .setColor('#9932CC') // Purple — change to #FF7A00 for orange
       .setDescription(
         'Your trusted, verified hub for safe trading.\n\n' +
         '🎮 **What We Handle**\n' +
         '• Roblox Accounts • Items • Gamepasses • Robux\n' +
         '• Discord Accounts • Cross-platform trades\n\n' +
-        '✅ **Why Use Us?**\n' +
-        '• Verified & Trusted Staff\n' +
-        '• Never go first — we protect both sides\n' +
-        '• All trades logged & recorded\n' +
-        '• **We NEVER ask for passwords or codes!**\n\n' +
-        '⚠️ DMing you first asking for info = SCAMMER. Always verify roles!'
+        '📋 **How It Works**\n' +
+        '1. Click **Open Ticket** below\n' +
+        '2. Fill in your trade details\n' +
+        '3. Wait for a middleman to claim\n' +
+        '4. Trade safely — never go first!\n\n' +
+        '⚠️ **SAFETY WARNING**\n' +
+        '• We NEVER ask for passwords or 2FA codes\n' +
+        '• Anyone DMing you first = SCAMMER\n' +
+        '• All trades happen in tickets only'
       )
-      .setFooter({ text: 'Xrytha\'s Middleman Service • Trust • Transparency • Protection' })
+      .setThumbnail('') // Put your logo/icon link here
+      .setFooter({
+        text: 'Xrytha\'s Middleman Service • Trust • Transparency • Protection',
+        iconURL: '' // Optional: small icon next to footer text
+      })
       .setTimestamp();
 
-    const buttons = new ActionRowBuilder().addComponents(
+    // 🎯 BUTTONS — max 5 per row!
+    const buttonsRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId('open_ticket')
-        .setLabel('🎟️ Open Trade Ticket')
+        .setCustomId('mm_open_ticket')
+        .setLabel('🎟️ Open Ticket')
         .setStyle(ButtonStyle.Primary),
+
       new ButtonBuilder()
-        .setCustomId('verify_user')
-        .setLabel('✅ Verify Account')
-        .setStyle(ButtonStyle.Success)
+        .setCustomId('mm_rules')
+        .setLabel('📜 Rules')
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId('mm_verify')
+        .setLabel('✅ Verify')
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
+        .setCustomId('mm_vouches')
+        .setLabel('⭐ Vouches')
+        .setStyle(ButtonStyle.Secondary)
     );
 
-    // ✅ Clean — no video, just embed + buttons
+    // Send the panel
     await interaction.channel.send({
-      embeds: [embed],
-      components: [buttons]
+      embeds: [panelEmbed],
+      components: [buttonsRow]
     });
 
-    await interaction.reply({ content: '✅ Middleman setup sent!', ephemeral: true });
+    // Confirmation only YOU see
+    await interaction.reply({
+      content: '✅ Middleman panel sent!',
+      ephemeral: true
+    });
   }
 };
