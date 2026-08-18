@@ -4,7 +4,7 @@ const path = require('path');
 
 require('./keepalive.js');
 
-// ✅ All from Render Secrets — nothing hardcoded!
+// ✅ All from Render Secrets
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const BOT_OWNER_ID = process.env.DISCORD_OWNER_ID;
@@ -17,8 +17,9 @@ const MIDDLEMAN_ROLES = [
   process.env.MM_ROLE_4
 ];
 
-// Boost channel ID — already filled in!
+// Hardcoded IDs
 const BOOST_CHANNEL_ID = '1537576010436968628';
+const VOUCH_CHANNEL_ID = '1537578277068079264';
 
 if (!TOKEN || !CLIENT_ID || !BOT_OWNER_ID || !GUILD_ID) {
   console.error('❌ Missing required Discord environment variables!');
@@ -34,7 +35,7 @@ const client = new Client({
   ]
 });
 
-// ─── Load Commands ───
+// ─── Load Slash Commands ───
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 
@@ -75,9 +76,8 @@ client.once('ready', async () => {
   }
 });
 
-// ─── Interaction Handler ───
+// ─── Slash Command Handler ───
 client.on('interactionCreate', async interaction => {
-  // Slash Commands
   if (interaction.isChatInputCommand()) {
     const cmd = client.commands.get(interaction.commandName);
     if (!cmd) return;
@@ -158,7 +158,7 @@ client.on('interactionCreate', async interaction => {
         '• No passwords or 2FA codes — ever\n' +
         '• Screenshots of everything\n' +
         '• Be patient — wait for staff to claim\n' +
-        '• Use `/vouch` after trade in #vouches channel\n' +
+        '• Use `vouchers @User reason` in #vouches after trade\n' +
         '• Anyone DMing you first = SCAMMER'
       );
     return interaction.reply({ embeds: [rulesEmbed], ephemeral: true });
@@ -167,7 +167,7 @@ client.on('interactionCreate', async interaction => {
   // ─── BUTTON: Vouches Info ───
   if (interaction.isButton() && interaction.customId === 'mm_vouches') {
     return interaction.reply({
-      content: '⭐ **How to leave a vouch:**\n• Go to #vouches channel\n• Positive: `/vouch @User positive`\n• Negative: `/vouch @User negative [reason]`\n\nThank you for trading with us! 💜',
+      content: `⭐ **How to leave a vouch:**\n• Go to <#${VOUCH_CHANNEL_ID}>\n• Type: \`vouchers @User reason\`\n• Example: \`vouchers @Xrytha great trade, trusted!\`\n\nThank you for trading with us! 💜`,
       ephemeral: true
     });
   }
@@ -206,7 +206,7 @@ client.on('interactionCreate', async interaction => {
       }
     ];
 
-    // Add all middleman roles (skip empty ones)
+    // Add all middleman roles
     for (const roleId of MIDDLEMAN_ROLES) {
       if (!roleId) continue;
       perms.push({
@@ -229,7 +229,7 @@ client.on('interactionCreate', async interaction => {
       permissionOverwrites: perms
     });
 
-    // Welcome embed in ticket
+    // Welcome embed
     const welcomeEmbed = new EmbedBuilder()
       .setTitle('🎟️ Middleman Ticket — Trade Details')
       .setColor('#9932CC')
@@ -281,6 +281,84 @@ client.on('interactionCreate', async interaction => {
       ]
     });
     await interaction.update({ components: [] }).catch(() => {});
+  }
+});
+
+// ─── PREFIX VOUCH COMMAND HANDLER ───
+const VOUCH_DATA_PATH = path.join(__dirname, './vouches-data.json');
+if (!fs.existsSync(VOUCH_DATA_PATH)) fs.writeFileSync(VOUCH_DATA_PATH, '{}');
+
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+
+  if (message.content.toLowerCase().startsWith('vouchers ')) {
+    // Wrong channel
+    if (message.channel.id !== VOUCH_CHANNEL_ID) {
+      return message.reply(`❌ Use this in <#${VOUCH_CHANNEL_ID}> only!`);
+    }
+
+    const args = message.content.slice(9).trim().split(/ +/);
+    const targetUser = message.mentions.users.first();
+
+    // No user mentioned
+    if (!targetUser) {
+      return message.reply(
+        '❌ **Wrong format!**\n' +
+        '✅ **Do this:** `vouchers @User reason`\n' +
+        '📝 Example: `vouchers @Xrytha great trade, went first!`'
+      );
+    }
+
+    // Vouching for yourself
+    if (targetUser.id === message.author.id) {
+      return message.reply('❌ You can\'t vouch for yourself!');
+    }
+
+    // No reason
+    const reason = args.slice(1).join(' ');
+    if (!reason) {
+      return message.reply(
+        '❌ **You forgot the reason!**\n' +
+        '✅ **Do this:** `vouchers @User reason`\n' +
+        '📝 Example: `vouchers @Xrytha trusted middleman, fast service`'
+      );
+    }
+
+    // Load & save
+    const data = JSON.parse(fs.readFileSync(VOUCH_DATA_PATH, 'utf8'));
+    if (!data[targetUser.id]) data[targetUser.id] = { count: 0 };
+    data[targetUser.id].count++;
+    fs.writeFileSync(VOUCH_DATA_PATH, JSON.stringify(data, null, 2));
+
+    const newCount = data[targetUser.id].count;
+
+    // Update nickname
+    const targetMember = message.guild.members.cache.get(targetUser.id);
+    if (targetMember) {
+      const displayName = targetMember.nickname || targetMember.user.username;
+      const cleanName = displayName.replace(/\s*\(vouch\s*\d*\)\s*$/i, '');
+      const newNick = `${cleanName} (vouch ${newCount})`;
+      try {
+        await targetMember.setNickname(newNick, 'Vouch count updated');
+      } catch {
+        // Ignore if can't change nickname
+      }
+    }
+
+    // Success embed
+    const embed = new EmbedBuilder()
+      .setTitle('✅ VOUCH ADDED')
+      .setColor('#9932CC')
+      .addFields(
+        { name: 'User', value: `<@${targetUser.id}>`, inline: true },
+        { name: 'Vouched By', value: `<@${message.author.id}>`, inline: true },
+        { name: 'Reason', value: reason, inline: false },
+        { name: '📊 Total Vouches', value: `**${newCount}**`, inline: true }
+      )
+      .setThumbnail(targetUser.displayAvatarURL())
+      .setTimestamp();
+
+    await message.reply({ embeds: [embed] });
   }
 });
 
