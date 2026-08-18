@@ -2,76 +2,78 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
-const dataPath = path.join(__dirname, '../vouches.json');
-if (!fs.existsSync(dataPath)) fs.writeFileSync(dataPath, '{}');
+const DATA_PATH = path.join(__dirname, '../vouches-data.json');
+const VOUCH_CHANNEL_ID = '1537578277068079264'; // ← FILL THIS IN!
 
-const loadData = () => JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-const saveData = (d) => fs.writeFileSync(dataPath, JSON.stringify(d, null, 2));
+// Create file if it doesn't exist
+if (!fs.existsSync(DATA_PATH)) fs.writeFileSync(DATA_PATH, '{}');
 
-// ✅ PUT YOUR CHANNEL ID HERE
-const VOUCH_CHANNEL_ID = '1537578277068079264';
+const loadData = () => JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
+const saveData = (data) => fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2));
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vouch')
-    .setDescription('Vouch for a middleman')
-    .addUserOption(option =>
-      option.setName('middleman')
-        .setDescription('Who you are vouching for')
-        .setRequired(true)
+    .setDescription('Leave a vouch for someone')
+    .addSubcommand(sub =>
+      sub.setName('positive')
+        .setDescription('✅ Positive vouch')
+        .addUserOption(opt => opt.setName('user').setDescription('Who are you vouching for?').setRequired(true))
+        .addStringOption(opt => opt.setName('reason').setDescription('Reason / trade details').setRequired(true))
     )
-    .addStringOption(option =>
-      option.setName('comment')
-        .setDescription('Your experience / trade details')
-        .setRequired(true)
+    .addSubcommand(sub =>
+      sub.setName('negative')
+        .setDescription('❌ Negative vouch')
+        .addUserOption(opt => opt.setName('user').setDescription('Who are you vouching for?').setRequired(true))
+        .addStringOption(opt => opt.setName('reason').setDescription('Reason / what went wrong').setRequired(true))
     ),
 
   async execute(interaction) {
-    const mm = interaction.options.getUser('middleman');
-    const comment = interaction.options.getString('comment');
-    const user = interaction.user;
+    const type = interaction.options.getSubcommand();
+    const user = interaction.options.getUser('user');
+    const reason = interaction.options.getString('reason');
+    const author = interaction.user;
 
-    if (mm.id === user.id) {
-      return interaction.reply({ content: '❌ You cannot vouch for yourself!', ephemeral: true });
+    // Can't vouch for yourself
+    if (user.id === author.id) {
+      return interaction.reply({ content: '❌ You can\'t vouch for yourself!', ephemeral: true });
+    }
+
+    // Only in vouch channel
+    if (interaction.channel.id !== VOUCH_CHANNEL_ID) {
+      return interaction.reply({ content: `❌ Use this in <#${VOUCH_CHANNEL_ID}> only!`, ephemeral: true });
     }
 
     const data = loadData();
-    data[mm.id] = (data[mm.id] || 0) + 1;
-    saveData(data);
-    const count = data[mm.id];
 
-    // ✅ KEEPS their current name — just adds (Vouch #X) at the end
-    const member = interaction.guild.members.cache.get(mm.id);
-    if (member && member.manageable) {
-      // Remove old (Vouch #X) if there is one, then add the new one
-      let baseName = member.displayName.replace(/\s*\(Vouch #\d+\)\s*$/, '');
-      try {
-        await member.setNickname(`${baseName} (Vouch #${count})`);
-      } catch (e) {
-        console.log('⚠️ Could not change nickname — check permissions/role order');
-      }
+    // Create user entry if first vouch
+    if (!data[user.id]) {
+      data[user.id] = { positives: 0, negatives: 0 };
     }
 
+    // Add the vouch
+    if (type === 'positive') data[user.id].positives++;
+    else data[user.id].negatives++;
+
+    saveData(data);
+
+    const isPos = type === 'positive';
     const embed = new EmbedBuilder()
-      .setTitle('✅ NEW VOUCH — Middleman Service')
-      .setColor('#9932CC')
+      .setTitle(isPos ? '✅ POSITIVE VOUCH' : '❌ NEGATIVE VOUCH')
+      .setColor(isPos ? '#2ECC71' : '#E74C3C')
       .addFields(
-        { name: 'Middleman', value: `<@${mm.id}>`, inline: true },
-        { name: 'Vouched By', value: `<@${user.id}>`, inline: true },
-        { name: 'Total Vouches', value: `**${count}**`, inline: true },
-        { name: 'Comment', value: comment }
+        { name: 'User', value: `<@${user.id}>`, inline: true },
+        { name: 'Vouched By', value: `<@${author.id}>`, inline: true },
+        { name: 'Reason', value: reason, inline: false },
+        {
+          name: '📊 Totals',
+          value: `✅ Positives: **${data[user.id].positives}**\n❌ Negatives: **${data[user.id].negatives}**`,
+          inline: false
+        }
       )
+      .setThumbnail(user.displayAvatarURL())
       .setTimestamp();
 
-    const channel = interaction.guild.channels.cache.get(VOUCH_CHANNEL_ID);
-    if (!channel) {
-      return interaction.reply({ content: '❌ Vouch channel not found!', ephemeral: true });
-    }
-
-    await channel.send({ embeds: [embed] });
-    await interaction.reply({
-      content: `✅ Vouch recorded! <@${mm.id}> — **${count}** vouches.`,
-      ephemeral: true
-    });
+    await interaction.reply({ embeds: [embed] });
   }
 };
