@@ -1,392 +1,209 @@
-const { Client, GatewayIntentBits, Collection, REST, Routes, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, REST, Routes, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
+// ✅ Keep bot online 24/7
 require('./keepalive.js');
 
-// ✅ All from Render Secrets
+// ✅ ALL from Render Secrets — nothing hardcoded
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-const BOT_OWNER_ID = process.env.DISCORD_OWNER_ID;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
+const OWNER_ID = process.env.DISCORD_OWNER_ID;
 const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID;
-const MIDDLEMAN_ROLES = [
+// Add your 4 middleman role IDs in Render Secrets too: MM_ROLE_1, MM_ROLE_2, MM_ROLE_3, MM_ROLE_4
+const MM_ROLES = [
   process.env.MM_ROLE_1,
   process.env.MM_ROLE_2,
   process.env.MM_ROLE_3,
   process.env.MM_ROLE_4
-];
+].filter(Boolean);
 
-// Hardcoded Channel IDs
-const BOOST_CHANNEL_ID = '1537576010436968628';
-const VOUCH_CHANNEL_ID = '1537578277068079264';
-
-if (!TOKEN || !CLIENT_ID || !BOT_OWNER_ID || !GUILD_ID) {
-  console.error('❌ Missing required Discord environment variables!');
+// ⚠️ Validate required secrets
+if (!TOKEN || !CLIENT_ID || !GUILD_ID || !OWNER_ID) {
+  console.error('❌ Missing secrets! Check Render: DISCORD_TOKEN, CLIENT_ID, GUILD_ID, OWNER_ID');
   process.exit(1);
 }
 
+// ✅ Create bot client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ]
 });
 
-// ─── Load Slash Commands ───
+// ✅ Auto-load ALL commands from /commands folder
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
-  console.log('📂 Found command files:', commandFiles);
   for (const file of commandFiles) {
     try {
       const cmd = require(path.join(commandsPath, file));
       if (cmd.data && cmd.execute) {
         client.commands.set(cmd.data.name, cmd);
-        console.log('✅ Loaded:', cmd.data.name);
+        console.log(`✅ Loaded: ${cmd.data.name}`);
       }
     } catch (e) {
-      console.error('❌ Error loading', file, ':', e.message);
+      console.error(`❌ Failed to load ${file}:`, e.message);
     }
   }
+} else {
+  console.warn('⚠️ /commands folder not found — create it!');
 }
 
-// ─── Ready ───
+// ✅ Bot ready + register all slash commands
 client.once('ready', async () => {
-  console.log(`✅ Logged in: ${client.user.tag}`);
-  console.log('🎟️ Xrytha\'s Middleman Bot — Online');
-  console.log('📊 Commands loaded:', client.commands.size);
+  console.log(`\n🛡️ XRYTHA'S MIDDLEMAN BOT ONLINE`);
+  console.log(`✅ Logged in as: ${client.user.tag}`);
+  console.log(`✅ Loaded ${client.commands.size} commands`);
+  console.log(`✅ Server: ${GUILD_ID}`);
 
   const rest = new REST({ version: '10' }).setToken(TOKEN);
-  const cmds = [...client.commands.values()].map(c => c.data.toJSON());
+  const commands = [...client.commands.values()].map(c => c.data.toJSON());
 
   try {
-    console.log('🔄 Registering commands...');
+    console.log('\n🔄 Registering commands...');
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: cmds }
+      { body: commands }
     );
-    console.log('✅ Commands registered!');
+    console.log('✅ All commands registered!');
   } catch (e) {
-    console.error('❌ Command register error:', e);
+    console.error('❌ Register error:', e);
   }
 });
 
-// ─── Slash Command Handler ───
+// ✅ Handle slash commands
 client.on('interactionCreate', async interaction => {
-  if (interaction.isChatInputCommand()) {
-    const cmd = client.commands.get(interaction.commandName);
-    if (!cmd) return;
+  if (!interaction.isChatInputCommand()) return;
+  if (interaction.guildId !== GUILD_ID) return;
 
-    if (cmd.ownerOnly && interaction.user.id !== BOT_OWNER_ID) {
-      return interaction.reply({ content: '❌ Owner only.', ephemeral: true });
-    }
+  const cmd = client.commands.get(interaction.commandName);
+  if (!cmd) return;
 
-    try {
-      await cmd.execute(interaction, client);
-    } catch (e) {
-      console.error('Command error:', e);
-      if (!interaction.replied) {
-        interaction.reply({ content: '❌ Something went wrong.', ephemeral: true }).catch(() => {});
-      }
+  try {
+    await cmd.execute(interaction);
+  } catch (e) {
+    console.error(`❌ Command error: ${interaction.commandName}`, e);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: '❌ Something went wrong.', ephemeral: true }).catch(() => {});
     }
   }
+});
 
-  // ─── BUTTON: Open Ticket Form ───
-  if (interaction.isButton() && interaction.customId === 'mm_open_modal') {
-    const modal = new ModalBuilder()
-      .setCustomId('mm_trade_form')
-      .setTitle('🎟️ Middleman Trade Request');
+// 🎯 BUTTON HANDLERS — Rules + Open Ticket
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isButton()) return;
 
-    const itemInput = new TextInputBuilder()
-      .setCustomId('trade_item')
-      .setLabel('What are you trading?')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. 1x1x1x1 Secret / 50k Robux')
-      .setRequired(true);
-
-    const valueInput = new TextInputBuilder()
-      .setCustomId('trade_value')
-      .setLabel('Approx value / asking price')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. 10k-20k / 7.2k Robux')
-      .setRequired(true);
-
-    const yourIdInput = new TextInputBuilder()
-      .setCustomId('your_userid')
-      .setLabel('Your Roblox User ID')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Found on your Roblox profile URL')
-      .setRequired(true);
-
-    const partnerInput = new TextInputBuilder()
-      .setCustomId('partner_info')
-      .setLabel('Trading partner (name + ID)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Username123 (123456789)')
-      .setRequired(true);
-
-    const extraInput = new TextInputBuilder()
-      .setCustomId('extra_notes')
-      .setLabel('Extra info / screenshots (optional)')
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(false);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(itemInput),
-      new ActionRowBuilder().addComponents(valueInput),
-      new ActionRowBuilder().addComponents(yourIdInput),
-      new ActionRowBuilder().addComponents(partnerInput),
-      new ActionRowBuilder().addComponents(extraInput)
-    );
-
-    await interaction.showModal(modal);
-  }
-
-  // ─── BUTTON: Show Rules ───
-  if (interaction.isButton() && interaction.customId === 'mm_rules') {
+  // 📜 RULES BUTTON — Show ticket rules (ephemeral)
+  if (interaction.customId === 'show-ticket-rules') {
     const rulesEmbed = new EmbedBuilder()
-      .setTitle('📜 Xrytha\'s Middleman Rules')
+      .setTitle('📜 TICKET RULES — Read Before Trading!')
       .setColor('#9932CC')
-      .setDescription(
-        '• Never go first — middleman protects both sides\n' +
-        '• No DMs — all trades in tickets only\n' +
-        '• No passwords or 2FA codes — ever\n' +
-        '• Screenshots of everything\n' +
-        '• Be patient — wait for staff to claim\n' +
-        '• Type `vouch @User comment` in #vouches after trade\n' +
-        '• Anyone DMing you first = SCAMMER'
-      );
+      .setDescription(`
+## 📋 BEFORE YOU OPEN
+✅ Both traders must agree — don't open without the other
+✅ Know exactly what you're trading — items, value, platform
+✅ Be ready to send — don't open if away
+✅ NO trust trades — refusing middleman = scam risk
+
+## 🤝 HOW IT WORKS
+**1. Open Ticket** → Fill out → wait for middleman
+**2. MM Claims** → Confirms both sides & trade details
+**3. BOTH Send to MM FIRST** → Wait for both confirmations
+**4. MM Releases** → Items sent to each side
+**5. BOTH Confirm Received** → Ticket closed
+
+## ⚠️ STRICT RULES
+❌ Never go first without middleman
+❌ Don't change deal last minute
+❌ Keep ALL trade talk in ticket — no DMs
+❌ Don't rush or pressure middleman
+❌ Be honest about what you're trading
+❌ Don't close early — wait for both confirm
+
+## 🚩 RED FLAGS — STOP & REPORT
+🔴 "Just go first trust me"
+🔴 "Let's do it in DMs faster"
+🔴 Asks for money — OUR SERVICE IS FREE!
+🔴 Pressures, rushes, or gets angry
+🔴 Uses alt without telling you
+
+## 💜 REMINDER
+> **Never go first without a middleman. If something feels off — trust your gut.**
+      `)
+      .setFooter({ text: 'Xrytha\'s Middleman Service • Safe • Fair • Trusted' });
+
     return interaction.reply({ embeds: [rulesEmbed], ephemeral: true });
   }
 
-  // ─── BUTTON: Vouches Info ───
-  if (interaction.isButton() && interaction.customId === 'mm_vouches') {
-    return interaction.reply({
-      content: `⭐ **How to leave a vouch:**\n• Go to <#${VOUCH_CHANNEL_ID}>\n• Type: \`vouch @User your comment here\`\n• Example: \`vouch @Xrytha great trade, trusted!\`\n\nThank you for trading with us! 💜`,
-      ephemeral: true
-    });
-  }
+  // 🎟️ OPEN TICKET BUTTON — Auto-create ticket channel
+  if (interaction.customId === 'open-mm-ticket') {
+    const guild = interaction.guild;
+    const user = interaction.user;
 
-  // ─── MODAL SUBMIT → Create Ticket ───
-  if (interaction.isModalSubmit() && interaction.customId === 'mm_trade_form') {
-    const item = interaction.fields.getTextInputValue('trade_item');
-    const value = interaction.fields.getTextInputValue('trade_value');
-    const yourId = interaction.fields.getTextInputValue('your_userid');
-    const partner = interaction.fields.getTextInputValue('partner_info');
-    const extra = interaction.fields.getTextInputValue('extra_notes') || 'None provided';
-
-    const existing = interaction.guild.channels.cache.find(
-      c => c.name.startsWith('mm-') && c.topic === `user:${interaction.user.id}`
-    );
-    if (existing) {
-      return interaction.reply({ content: `❌ You already have a ticket open: ${existing}`, ephemeral: true });
+    if (!TICKET_CATEGORY_ID) {
+      return interaction.reply({ content: '❌ Ticket category not set — tell Xrytha!', ephemeral: true });
     }
 
-    const category = interaction.guild.channels.cache.get(TICKET_CATEGORY_ID);
-    if (!category) {
-      return interaction.reply({ content: '❌ Ticket category not set up!', ephemeral: true });
-    }
+    try {
+      // Build permissions — user + owner + all middleman roles
+      const perms = [
+        { id: guild.id, deny: ['ViewChannels'] },
+        { id: user.id, allow: ['ViewChannels', 'SendMessages', 'ReadMessageHistory'] },
+        { id: OWNER_ID, allow: ['ViewChannels', 'SendMessages', 'ManageChannels', 'ManageMessages'] }
+      ];
+      // Add all middleman roles
+      MM_ROLES.forEach(roleId => {
+        perms.push({ id: roleId, allow: ['ViewChannels', 'SendMessages', 'ReadMessageHistory'] });
+      });
 
-    const perms = [
-      { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-      {
-        id: interaction.user.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory
-        ]
-      }
-    ];
+      // Create ticket channel
+      const ticketChannel = await guild.channels.create({
+        name: `ticket-${user.username}`,
+        type: 0,
+        parent: TICKET_CATEGORY_ID,
+        permissionOverwrites: perms
+      });
 
-    for (const roleId of MIDDLEMAN_ROLES) {
-      if (!roleId) continue;
-      perms.push({
-        id: roleId,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory,
-          PermissionsBitField.Flags.ManageMessages
-        ]
+      // Welcome embed in ticket
+      const welcomeEmbed = new EmbedBuilder()
+        .setTitle('🛡️ New Trade Ticket')
+        .setColor('#9932CC')
+        .setDescription(`
+Hello ${user}! 👋
+
+**Please reply with:**
+• Who are you trading with? @User
+• What are you trading? (Item + value)
+• Platform? (Roblox, etc.)
+
+✅ A middleman will be with you shortly!
+⚠️ **DO NOT send items until a middleman confirms the trade!**
+        `)
+        .setFooter({ text: 'Xrytha\'s Middleman Service • Safe • Fair • Trusted' });
+
+      await ticketChannel.send({ embeds: [welcomeEmbed] });
+      await ticketChannel.send(`<@${user.id}> — Your ticket is ready!`);
+
+      return interaction.reply({
+        content: `✅ Your ticket has been created: ${ticketChannel}`,
+        ephemeral: true
+      });
+    } catch (e) {
+      console.error('❌ Ticket creation error:', e);
+      return interaction.reply({
+        content: '❌ Failed to create ticket. Check bot permissions!',
+        ephemeral: true
       });
     }
-
-    const ticketCh = await interaction.guild.channels.create({
-      name: `mm-${interaction.user.username}`,
-      type: 0,
-      parent: category.id,
-      topic: `user:${interaction.user.id}`,
-      permissionOverwrites: perms
-    });
-
-    const welcomeEmbed = new EmbedBuilder()
-      .setTitle('🎟️ Middleman Ticket — Trade Details')
-      .setColor('#9932CC')
-      .addFields(
-        { name: '📤 Trading', value: `**${item}**`, inline: false },
-        { name: '💰 Value', value: value, inline: true },
-        { name: '🆔 Your Roblox ID', value: `\`${yourId}\``, inline: true },
-        { name: '🤝 Trading With', value: partner, inline: false },
-        { name: '📝 Extra Notes', value: extra }
-      )
-      .setDescription(
-        `Welcome <@${interaction.user.id}>!\n\n` +
-        '✅ **Your trade details have been recorded.**\n' +
-        'A verified middleman will claim this ticket shortly.\n\n' +
-        '⚠️ **Do NOT send anything until told by a middleman.**\n' +
-        '⚠️ Never go first — always wait for instructions.'
-      )
-      .setFooter({ text: 'Xrytha\'s Middleman Service • Verified & Trusted' })
-      .setTimestamp();
-
-    const btns = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('mm_close_ticket').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('mm_claim_ticket').setLabel('✅ Claim Ticket').setStyle(ButtonStyle.Success)
-    );
-
-    await ticketCh.send({ embeds: [welcomeEmbed], components: [btns] });
-    await interaction.reply({ content: `✅ Ticket created: ${ticketCh}`, ephemeral: true });
-  }
-
-  // ─── Close Ticket ───
-  if (interaction.isButton() && interaction.customId === 'mm_close_ticket') {
-    await interaction.reply({ content: '🔒 Closing ticket in 3 seconds...', ephemeral: true });
-    setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
-  }
-
-  // ─── Claim Ticket ───
-  if (interaction.isButton() && interaction.customId === 'mm_claim_ticket') {
-    const hasRole = MIDDLEMAN_ROLES.some(r => r && interaction.member.roles.cache.has(r));
-    if (!hasRole) {
-      return interaction.reply({ content: '❌ Only middleman staff can claim tickets!', ephemeral: true });
-    }
-
-    await interaction.channel.send({
-      embeds: [new EmbedBuilder()
-        .setTitle('✅ Ticket Claimed')
-        .setColor('#2ECC71')
-        .setDescription(`This ticket is now being handled by <@${interaction.user.id}>.`)
-        .setTimestamp()
-      ]
-    });
-    await interaction.update({ components: [] }).catch(() => {});
   }
 });
 
-// ─── SIMPLE VOUCH SYSTEM — Type: vouch @User comment ───
-const VOUCH_DATA_PATH = path.join(__dirname, './vouches-data.json');
-if (!fs.existsSync(VOUCH_DATA_PATH)) fs.writeFileSync(VOUCH_DATA_PATH, '{}');
-
-client.on('messageCreate', async message => {
-  if (message.author.bot) return;
-
-  // Only works if message STARTS with "vouch "
-  if (!message.content.toLowerCase().startsWith('vouch ')) return;
-
-  // ❌ Wrong channel
-  if (message.channel.id !== VOUCH_CHANNEL_ID) {
-    return message.reply(
-      '❌ **Wrong channel!**\n' +
-      'Go to <#' + VOUCH_CHANNEL_ID + '> and type:\n' +
-      '`vouch @User your comment here`'
-    );
-  }
-
-  const args = message.content.slice(6).trim().split(/ +/);
-  const targetUser = message.mentions.users.first();
-
-  // ❌ No user tagged
-  if (!targetUser) {
-    return message.reply(
-      '❌ **You forgot to tag the person!**\n' +
-      '✅ **Do this:** `vouch @User your comment`\n' +
-      '📝 Example: `vouch @Xrytha great trade, trusted!`\n' +
-      '⚠️ **You MUST type @ then pick their name!**'
-    );
-  }
-
-  // ❌ Vouching for yourself
-  if (targetUser.id === message.author.id) {
-    return message.reply('❌ You can\'t vouch for yourself!');
-  }
-
-  // ❌ No comment/reason
-  const comment = args.slice(1).join(' ');
-  if (!comment) {
-    return message.reply(
-      '❌ **You forgot your comment!**\n' +
-      '✅ **Do this:** `vouch @User your comment`\n' +
-      '📝 Example: `vouch @Xrytha smooth trade, went first!`'
-    );
-  }
-
-  // ✅ Save the vouch
-  const data = JSON.parse(fs.readFileSync(VOUCH_DATA_PATH, 'utf8'));
-  if (!data[targetUser.id]) data[targetUser.id] = { count: 0 };
-  data[targetUser.id].count++;
-  fs.writeFileSync(VOUCH_DATA_PATH, JSON.stringify(data, null, 2));
-
-  const newCount = data[targetUser.id].count;
-
-  // ✅ Update nickname with (vouch X)
-  const targetMember = message.guild.members.cache.get(targetUser.id);
-  if (targetMember) {
-    const displayName = targetMember.nickname || targetMember.user.username;
-    const cleanName = displayName.replace(/\s*\(vouch\s*\d*\)\s*$/i, '');
-    const newNick = `${cleanName} (vouch ${newCount})`;
-    try {
-      await targetMember.setNickname(newNick, 'Vouch count updated');
-    } catch {
-      // Skip if no permission
-    }
-  }
-
-  // ✅ Success embed
-  const embed = new EmbedBuilder()
-    .setTitle('✅ VOUCH RECORDED')
-    .setColor('#9932CC')
-    .addFields(
-      { name: 'Vouched User', value: `<@${targetUser.id}>`, inline: true },
-      { name: 'Vouched By', value: `<@${message.author.id}>`, inline: true },
-      { name: 'Comment', value: comment, inline: false },
-      { name: '📊 Total Vouches', value: `**${newCount}**`, inline: true }
-    )
-    .setThumbnail(targetUser.displayAvatarURL())
-    .setTimestamp();
-
-  await message.reply({ embeds: [embed] });
-});
-
-// ─── BOOST ANNOUNCEMENT SYSTEM ───
-client.on('guildMemberUpdate', async (oldMember, newMember) => {
-  if (!oldMember.premiumSince && newMember.premiumSince) {
-    const channel = newMember.guild.channels.cache.get(BOOST_CHANNEL_ID);
-    if (!channel) return;
-
-    const boostEmbed = new EmbedBuilder()
-      .setTitle('🚀 SERVER BOOSTED!')
-      .setColor('#F472B6')
-      .setThumbnail(newMember.user.displayAvatarURL({ size: 256 }))
-      .setDescription(
-        `Thank you so much <@${newMember.id}> for boosting the server!\n\n` +
-        '💜 We appreciate your support!\n' +
-        'Enjoy your perks! 🎉'
-      )
-      .addFields(
-        { name: '👤 Booster', value: `<@${newMember.user.id}>`, inline: true },
-        { name: '📅 Boosting since', value: `<t:${Math.floor(newMember.premiumSince.getTime() / 1000)}:R>`, inline: true }
-      )
-      .setFooter({ text: 'Xrytha\'s Middleman Service • Thank you for boosting!' })
-      .setTimestamp();
-
-    await channel.send({ content: `<@${newMember.id}> THANK YOU! 🚀`, embeds: [boostEmbed] });
-  }
-});
-
+// ✅ Login
 client.login(TOKEN);
