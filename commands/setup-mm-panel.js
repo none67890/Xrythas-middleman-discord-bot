@@ -1,73 +1,101 @@
 const {
   SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  EmbedBuilder,
+  PermissionsBitField
 } = require('discord.js');
 
-const BOT_OWNER_ID = '1491469471775457290';
+// 🔒 YOUR OWNER ID — ONLY YOU CAN USE THIS COMMAND
+const OWNER_ID = '1491469471775457290';
 
 module.exports = {
-  ownerOnly: true,
   data: new SlashCommandBuilder()
-    .setName('setuppanel')
-    .setDescription('🔒 Send Xrytha\'s Middleman Service panel'),
+    .setName('ticket-panel')
+    .setDescription('🔒 Send the middleman ticket panel — Owner Only')
+    .setDefaultMemberPermissions('0'), // 🔒 HIDDEN FROM EVERYONE ELSE
 
   async execute(interaction) {
-    if (interaction.user.id !== BOT_OWNER_ID) {
-      return interaction.reply({ content: '❌ Only the owner can use this command.', ephemeral: true });
+    // 🔒 ONLY OWNER CAN RUN
+    if (interaction.user.id !== OWNER_ID) {
+      return interaction.reply({
+        content: '❌ **Access Denied.** Only the bot owner can use this.',
+        ephemeral: true
+      });
     }
 
+    // 🎟️ PANEL EMBED — SIMPLE & CLEAN
     const panelEmbed = new EmbedBuilder()
-      .setTitle('🛡️ **Xrytha\'s Middleman Service**')
+      .setTitle('🛡️ Xrytha\'s Middleman — Trade Ticket')
       .setColor('#9932CC')
-      .setDescription(
-        'Your trusted, verified hub for safe trading.\n\n' +
-        '🎮 **What We Handle**\n' +
-        '• Roblox Accounts • Items • Gamepasses • Robux\n' +
-        '• Discord Accounts • Cross-platform trades\n\n' +
-        '📋 **How It Works**\n' +
-        '1. Click **Open Ticket** below\n' +
-        '2. Fill in your trade details\n' +
-        '3. Wait for a middleman to claim\n' +
-        '4. Trade safely — never go first!\n\n' +
-        '⚠️ **SAFETY WARNING**\n' +
-        '• We NEVER ask for passwords or 2FA codes\n' +
-        '• Anyone DMing you first = SCAMMER\n' +
-        '• All trades happen in tickets only'
-      )
-      .setFooter({
-        text: 'Xrytha\'s Middleman Service • Trust • Transparency • Protection'
-      })
-      .setTimestamp();
+      .setDescription(`
+Ready to trade? Follow the rules & stay safe! 💜🧡
 
-    // ✅ BUTTONS — Verify REMOVED
-    const buttonsRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('mm_open_modal') // ✅ MATCHES main.js!
-        .setLabel('🎟️ Open Ticket')
-        .setStyle(ButtonStyle.Primary),
+📋 **Click 📜 RULES to read before opening**
+🎟️ **Click 🎟️ OPEN TICKET to start your trade**
+      `)
+      .setFooter({ text: 'Xrytha\'s Middleman Service • Safe • Fair • Trusted' });
 
+    // 🎯 BUTTONS — Rules + Open Ticket
+    const buttons = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId('mm_rules')
-        .setLabel('📜 Rules')
+        .setCustomId('show-ticket-rules')
+        .setLabel('📜 RULES')
         .setStyle(ButtonStyle.Secondary),
-
       new ButtonBuilder()
-        .setCustomId('mm_vouches')
-        .setLabel('⭐ Vouches')
-        .setStyle(ButtonStyle.Secondary)
+        .setCustomId('open-mm-ticket')
+        .setLabel('🎟️ OPEN TICKET')
+        .setStyle(ButtonStyle.Primary)
     );
 
+    // SEND PANEL
     await interaction.channel.send({
       embeds: [panelEmbed],
-      components: [buttonsRow]
+      components: [buttons]
     });
 
     await interaction.reply({
-      content: '✅ Middleman panel sent!',
+      content: '✅ Ticket panel sent!',
       ephemeral: true
     });
   }
 };
+
+// 📜 RULES EMBED — SENT WHEN THEY CLICK RULES BUTTON
+module.exports.rulesEmbed = new EmbedBuilder()
+  .setTitle('📜 TICKET RULES — Read Before Trading!')
+  .setColor('#9932CC')
+  .setDescription(`
+## 📋 BEFORE YOU OPEN
+✅ Both traders must agree — don't open without the other person
+✅ Know exactly what you're trading — items, value, platform
+✅ Be ready to send — don't open if you're away
+✅ NO trust trades — if they refuse middleman = scam risk
+
+## 🤝 HOW IT WORKS
+**1. Open Ticket** → Fill out form → wait for middleman
+**2. Middleman Claims** → Confirms both sides & trade details
+**3. BOTH Send to Middleman FIRST** → Wait for both confirmations
+**4. Middleman Releases** → Items sent to each side
+**5. BOTH Confirm Received** → Ticket closed
+
+## ⚠️ STRICT RULES
+❌ Don't go first without middleman
+❌ Don't change the deal last minute
+❌ Don't trade in DMs — keep ALL in ticket
+❌ Don't rush or pressure middleman
+❌ Don't lie about items — be honest
+❌ Don't close early — wait for both confirm
+
+## 🚩 RED FLAGS — STOP & REPORT
+🔴 "Just go first trust me"
+🔴 "Let's do it in DMs faster"
+🔴 Asks for money to middleman — OURS IS FREE!
+🔴 Pressures you, rushes you, gets angry
+🔴 Uses alt without telling you
+
+## 💜 REMINDER
+> **Never go first without a middleman. If something feels off — trust your gut.**
+  `)
+  .setFooter({ text: 'Xrytha\'s Middleman Service • Safe • Fair • Trusted' });
